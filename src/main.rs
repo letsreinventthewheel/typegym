@@ -3,6 +3,7 @@ use color_eyre::Result;
 use crate::{config::Config, state::State, text::get_text, ui::run_ui};
 
 mod app;
+mod character;
 mod config;
 mod state;
 mod text;

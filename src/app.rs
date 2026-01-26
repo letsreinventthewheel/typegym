@@ -1,25 +1,84 @@
 use crossterm::event::{KeyCode, KeyModifiers};
-use ratatui::{widgets::Paragraph, Frame};
+use ratatui::{
+    layout::{Constraint, Layout}, macros::vertical, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::Paragraph, Frame
+};
 
-use crate::{config::Config, state::State};
+use crate::{character::Character, config::Config, state::State};
 
 #[derive(Debug)]
-pub struct App {
+pub struct App<'a> {
+    pub config: &'a Config,
     pub state: State,
-    pub should_quit: bool
+    pub should_quit: bool,
 }
 
-impl App {
-    pub fn new(state: State, _config: &Config) -> Self {
+impl<'a> App<'a> {
+    pub fn new(state: State, config: &'a Config) -> Self {
         Self {
+            config,
             state,
             should_quit: false,
         }
     }
 
+    fn render_character(&self, character: &Character) -> Span<'_> {
+        match character {
+            Character::Hit(c) => Span::raw(c.to_string()),
+            Character::Miss(c) => Span::styled(
+                if *c == ' ' { '_'.to_string() } else { c.to_string() },
+                Style::default()
+                    .fg(Color::Indexed(self.config.fg_miss))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Character::Empty(c) => Span::styled(
+                c.to_string(),
+                Style::default().fg(Color::Indexed(self.config.fg_empty)),
+            ),
+        }
+    }
+
     pub fn draw(&self, frame: &mut Frame<'_>) {
-        let paragraph = Paragraph::new(self.state.target.clone());
-        frame.render_widget(paragraph, frame.area());
+        let page = self.state.build_page();
+
+        let mut lines = vec![];
+        for line in page.iter() {
+            let spans: Vec<_> = line
+                .iter()
+                .map(|character| self.render_character(character))
+                .collect();
+            lines.push(Line::from(spans));
+        }
+
+        let text_height = lines.len() as u16;
+        let vertical_margin = frame.area().height.saturating_sub(text_height) / 2;
+        let max_line_width = lines.iter().map(|line| line.width() as u16).max().unwrap_or(0);
+        let horizontal_margin = frame.area().width.saturating_sub(max_line_width) / 2;
+
+        let vertical = Layout::vertical([
+            Constraint::Length(vertical_margin),
+            Constraint::Length(text_height),
+            Constraint::Min(0),
+        ]);
+
+        let [_, middle_area, _] = vertical.areas(frame.area());
+
+        let horizontal = Layout::horizontal([
+            Constraint::Length(horizontal_margin),
+            Constraint::Length(max_line_width),
+            Constraint::Min(0),
+        ]);
+
+        let [_, centered_area, _] = horizontal.areas(middle_area);
+
+        let paragraph = Paragraph::new(lines);
+        frame.render_widget(paragraph, centered_area);
+
+        if !self.state.is_complete() {
+            let (cursor_row, cursor_col) = self.state.cursor();
+            let cursor_x = centered_area.x + cursor_col as u16;
+            let cursor_y = centered_area.y + cursor_row as u16;
+            frame.set_cursor_position((cursor_x, cursor_y));
+        }
     }
 
     pub fn handle_key_event(&mut self, key: KeyCode, modifiers: KeyModifiers) {

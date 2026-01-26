@@ -1,4 +1,9 @@
-use std::time::Instant;
+use std::{iter::repeat, time::Instant};
+
+use crate::character::{classify_character, Character};
+
+pub type Line = Vec<Character>;
+pub type Page = Vec<Line>;
 
 #[derive(Debug)]
 pub struct State {
@@ -21,14 +26,14 @@ pub struct State {
     pub hits: u64,
 
     /// A flag indicating whether we want to start another practice session
-    pub should_loop: bool
+    pub should_loop: bool,
 }
 
 impl State {
     pub fn new(text: String) -> Self {
         Self {
             target: text,
-            input: "".to_string(),
+            input: "Thu  is a bear minimum ".to_string(),
             session_start: None,
             session_end: None,
             strokes: 0,
@@ -63,5 +68,44 @@ impl State {
 
     pub fn stop_clock(&self) {
         todo!("stop clock")
+    }
+
+    fn build_line(&self, target: &str, input: &str) -> Line {
+        let target_chars = target.chars().map(Some).chain(repeat(None));
+        let input_chars = input.chars().map(Some).chain(repeat(None));
+        let max_length = target.chars().count().max(input.chars().count());
+
+        target_chars
+            .zip(input_chars)
+            .take(max_length)
+            .map(|(t, i)| classify_character(t, i))
+            .collect()
+    }
+
+    pub fn build_page(&self) -> Page {
+        let target_lines: Vec<_> = self.target.lines().collect();
+        let mut input_lines: Vec<_> = self.input.lines().collect();
+
+        while input_lines.len() < target_lines.len() {
+            input_lines.push("");
+        }
+
+        target_lines
+            .iter()
+            .zip(input_lines.iter())
+            .map(|(&target, &input)| self.build_line(target, input))
+            .collect()
+    }
+
+    pub fn cursor_row(&self) -> usize {
+        self.input.chars().filter(|&c| c == '\n').count()
+    }
+
+    pub fn cursor_col(&self) -> usize {
+        self.input.chars().rev().take_while(|&c| c != '\n').count()
+    }
+
+    pub fn cursor(&self) -> (usize, usize) {
+        (self.cursor_row(), self.cursor_col())
     }
 }
