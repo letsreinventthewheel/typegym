@@ -28,5 +28,5 @@ pub fn run_ui(state: State, config: &Config) -> Result<bool> {
     ratatui::restore();
     execute!(stdout(), DisableMouseCapture)?;
 
-    Ok(false)
+    Ok(app.state.should_loop)
 }

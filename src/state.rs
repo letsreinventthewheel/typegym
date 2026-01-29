@@ -1,6 +1,6 @@
 use std::{iter::repeat, time::Instant};
 
-use crate::character::{classify_character, Character};
+use crate::character::{Character, classify_character};
 
 pub type Line = Vec<Character>;
 pub type Page = Vec<Line>;
@@ -33,7 +33,7 @@ impl State {
     pub fn new(text: String) -> Self {
         Self {
             target: text,
-            input: "Thu  is a bear minimum ".to_string(),
+            input: "".to_string(),
             session_start: None,
             session_end: None,
             strokes: 0,
@@ -42,16 +42,82 @@ impl State {
         }
     }
 
-    pub fn apply_char(&self, _c: char) {
-        todo!("apply char")
+    pub fn apply_char(&mut self, c: char) {
+        let target_count = self.target.chars().count();
+        let input_count = self.input.chars().count();
+
+        if input_count >= target_count {
+            return;
+        }
+
+        let to_append = if c.is_whitespace() {
+            let ws: String = self
+                .target
+                .chars()
+                .skip(input_count)
+                .take_while(|c| c.is_whitespace())
+                .collect();
+            if ws.is_empty() { " ".to_string() } else { ws }
+        } else {
+            c.to_string()
+        };
+
+        self.input.push_str(&to_append);
+
+        self.strokes += 1;
+        if self.is_error_free() {
+            self.hits += 1;
+        }
     }
 
-    pub fn apply_backspace(&self) {
-        todo!("apply backspace")
+    pub fn apply_backspace(&mut self) {
+        if self.input.is_empty() {
+            return;
+        }
+
+        let matching_count = self.input
+            .chars()
+            .zip(self.target.chars())
+            .collect::<Vec<_>>()
+            .iter()
+            .rev()
+            .take_while(|(i, t)| i.is_whitespace() && t.is_whitespace())
+            .count();
+
+        let to_remove = matching_count.max(1);
+        let new_len = self.input.chars().count().saturating_sub(to_remove);
+        self.input = self.input.chars().take(new_len).collect();
     }
 
-    pub fn apply_backspace_word(&self) {
-        todo!("apply backspace word")
+    pub fn apply_backspace_word(&mut self) {
+        if self.input.is_empty() {
+            return;
+        }
+
+        let mut count = 0;
+        let mut seen_non_whitespace = false;
+
+        for c in self.input.chars().rev() {
+            if !seen_non_whitespace && c.is_whitespace() {
+                // Part 1: removing all trailing whitespaces
+                count += 1;
+            } else if !c.is_whitespace() {
+                // Part 2: remove the word (all non-whitespace characters)
+                count += 1;
+                seen_non_whitespace = true;
+            } else if seen_non_whitespace && c.is_whitespace() {
+                // Part 3: remove single whitespace before the word, then stop
+                count += 1;
+                break;
+            }
+        }
+
+        let new_len = self.input.chars().count().saturating_sub(count);
+        self.input = self.input.chars().take(new_len).collect();
+    }
+
+    fn is_error_free(&self) -> bool {
+        self.target.starts_with(&self.input)
     }
 
     pub fn is_complete(&self) -> bool {
@@ -59,15 +125,15 @@ impl State {
     }
 
     pub fn has_started(&self) -> bool {
-        todo!("has started")
+        self.session_start.is_some()
     }
 
-    pub fn start_clock(&self) {
-        todo!("start clock")
+    pub fn start_clock(&mut self) {
+        self.session_start = Some(Instant::now());
     }
 
-    pub fn stop_clock(&self) {
-        todo!("stop clock")
+    pub fn stop_clock(&mut self) {
+        self.session_end = Some(Instant::now());
     }
 
     fn build_line(&self, target: &str, input: &str) -> Line {
@@ -107,5 +173,49 @@ impl State {
 
     pub fn cursor(&self) -> (usize, usize) {
         (self.cursor_row(), self.cursor_col())
+    }
+
+    fn elapsed_seconds(&self) -> f64 {
+        match (self.session_start, self.session_end) {
+            (Some(start), Some(end)) => end.duration_since(start).as_secs_f64(),
+            _ => 0.0
+        }
+    }
+
+    fn chars_count(&self) -> usize {
+        let mut count = 0;
+        let mut in_whitespace_group = false;
+
+        for c in self.target.chars() {
+            if c.is_whitespace() {
+                if !in_whitespace_group {
+                    count += 1;
+                    in_whitespace_group = true;
+                }
+            } else {
+                count += 1;
+                in_whitespace_group = false;
+            }
+        }
+
+        count
+    }
+
+    pub fn wpm(&self) -> f64 {
+        let seconds = self.elapsed_seconds();
+        if seconds == 0.0 {
+            return 0.0;
+        }
+
+        let chars = self.chars_count() as f64;
+        (chars / 5.0) / (seconds / 60.0)
+    }
+
+    pub fn accuracy(&self) -> f64 {
+        if self.strokes == 0 {
+            return 1.0;
+        }
+
+        self.hits as f64 / self.strokes as f64
     }
 }

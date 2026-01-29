@@ -1,6 +1,10 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
-    layout::{Constraint, Layout}, macros::vertical, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::Paragraph, Frame
+    Frame,
+    layout::{Constraint, Layout},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::Paragraph,
 };
 
 use crate::{character::Character, config::Config, state::State};
@@ -25,7 +29,11 @@ impl<'a> App<'a> {
         match character {
             Character::Hit(c) => Span::raw(c.to_string()),
             Character::Miss(c) => Span::styled(
-                if *c == ' ' { '_'.to_string() } else { c.to_string() },
+                if *c == ' ' {
+                    '_'.to_string()
+                } else {
+                    c.to_string()
+                },
                 Style::default()
                     .fg(Color::Indexed(self.config.fg_miss))
                     .add_modifier(Modifier::BOLD),
@@ -49,9 +57,30 @@ impl<'a> App<'a> {
             lines.push(Line::from(spans));
         }
 
+        if self.state.is_complete() {
+            let wpm = self.state.wpm();
+            let accuracy = self.state.accuracy() * 100.0;
+
+            let results = format!("{:.0} words per minute ~ {:.0}% accuracy", wpm, accuracy);
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                results,
+                Style::default()
+                    .fg(Color::Indexed(self.config.fg_results))
+                    .add_modifier(Modifier::BOLD),
+            )));
+
+            lines.push(Line::from(""));
+            lines.push(Line::from("Press Enter to quit, Esc to start new session"));
+        }
+
         let text_height = lines.len() as u16;
         let vertical_margin = frame.area().height.saturating_sub(text_height) / 2;
-        let max_line_width = lines.iter().map(|line| line.width() as u16).max().unwrap_or(0);
+        let max_line_width = lines
+            .iter()
+            .map(|line| line.width() as u16)
+            .max()
+            .unwrap_or(0);
         let horizontal_margin = frame.area().width.saturating_sub(max_line_width) / 2;
 
         let vertical = Layout::vertical([
