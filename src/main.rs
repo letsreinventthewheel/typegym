@@ -5,6 +5,7 @@ use crate::{config::Config, state::State, text::get_text, ui::run_ui};
 mod app;
 mod character;
 mod config;
+mod markov;
 mod state;
 mod text;
 mod ui;

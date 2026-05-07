@@ -21,7 +21,7 @@ impl Config {
             fg_miss: 1,
             fg_empty: 8,
             fg_results: 1,
-            text_source: TextSource::File("src/main.rs".to_string()),
+            text_source: TextSource::MarkovChain("data/markov.txt".to_string()),
         }
     }
 }

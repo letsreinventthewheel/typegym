@@ -1,7 +1,7 @@
 use color_eyre::Result;
 use rand::{seq::IndexedRandom, RngExt};
 
-use crate::config::Config;
+use crate::{config::Config, markov::MarkovChain};
 
 const TEXT: &'static str =
     "This is a bare minimum example.   There are many approaches to running an application loop, so
@@ -23,7 +23,7 @@ pub enum TextSource {
     File(String),
 
     /// Generate text using Markov Chain
-    // TODO: MarkovChain(String),
+    MarkovChain(String),
 }
 
 pub fn get_text(config: &Config) -> Result<String> {
@@ -32,6 +32,7 @@ pub fn get_text(config: &Config) -> Result<String> {
         TextSource::GenerateNonsense => generate_nonsense(),
         TextSource::GenerateWeightedNonsense => generate_weighted_nonsense(),
         TextSource::File(ref path) => read_lines_from_file(path),
+        TextSource::MarkovChain(ref path) => generate_markov_chain(path),
     }
 }
 
@@ -93,4 +94,10 @@ fn read_lines_from_file(path: &str) -> Result<String> {
 
     let selected_lines = &lines[start_index..start_index + max_lines];
     Ok(selected_lines.join("\n"))
+}
+
+fn generate_markov_chain(path: &str) -> Result<String> {
+    let contents = std::fs::read_to_string(path)?;
+    let chain = MarkovChain::build(&contents);
+    Ok(chain.generate())
 }
