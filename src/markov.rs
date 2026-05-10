@@ -40,11 +40,11 @@ impl MarkovChain {
         chain
     }
 
-    pub fn generate(&self) -> String {
+    pub fn generate(&self, max_words: usize) -> String {
         let mut rng = rand::rng();
         let mut words: Vec<String> = Vec::new();
 
-        while words.len() < 100 {
+        while words.len() < max_words {
             let Some(starter) = self.starters.choose(&mut rng) else {
                 return Default::default();
             };
@@ -52,7 +52,11 @@ impl MarkovChain {
             let (mut previous, mut current) = starter.clone();
 
             words.push(previous.clone());
-            words.push(current.clone());
+            if words.len() < max_words {
+                words.push(current.clone());
+            } else {
+                break;
+            }
 
             loop {
                 let Some(choices) = self.transitions.get(&(previous, current.clone())) else {
@@ -63,7 +67,11 @@ impl MarkovChain {
                     break;
                 };
 
-                words.push(next.clone());
+                if words.len() < max_words {
+                    words.push(next.clone());
+                } else {
+                    break;
+                }
                 previous = current;
                 current = next.clone();
             }

@@ -1,3 +1,5 @@
+use core::str::FromStr;
+
 use color_eyre::Result;
 use rand::{seq::IndexedRandom, RngExt};
 
@@ -8,7 +10,7 @@ const TEXT: &'static str =
 this is not meant to be prescriptive. It is only meant to demonstrate the basic setup and
 teardown of a terminal application.";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TextSource {
     /// Hard coded text, always the same
     Static,
@@ -26,22 +28,82 @@ pub enum TextSource {
     MarkovChain(String),
 }
 
-pub fn get_text(config: &Config) -> Result<String> {
-    match config.text_source {
-        TextSource::Static => Ok(TEXT.to_string()),
-        TextSource::GenerateNonsense => generate_nonsense(),
-        TextSource::GenerateWeightedNonsense => generate_weighted_nonsense(),
-        TextSource::File(ref path) => read_lines_from_file(path),
-        TextSource::MarkovChain(ref path) => generate_markov_chain(path),
+impl FromStr for TextSource {
+    type Err = String;
+
+    fn from_str(source: &str) -> core::result::Result<Self, Self::Err> {
+        match source {
+            "static" => Ok(TextSource::Static),
+            "nonsense" => Ok(TextSource::GenerateNonsense),
+            "weighted" => Ok(TextSource::GenerateWeightedNonsense),
+            _ => {
+                if let Some(path) = source.strip_prefix("file:") {
+                    if path.is_empty() {
+                        Err("file source expects file path, .e.g file:data/words.txt".to_string())
+                    } else {
+                        Ok(TextSource::File(path.to_string()))
+                    }
+                } else if let Some(path) = source.strip_prefix("markov:") {
+                    if path.is_empty() {
+                        Err("markov source expects file path, .e.g markov:data/markov.txt".to_string())
+                    } else {
+                        Ok(TextSource::MarkovChain(path.to_string()))
+                    }
+                } else {
+                    Err("expected static, nonsense, weighted, file:<path> or markov:<path>".to_string())
+                }
+            }
+        }
     }
 }
 
-fn generate_nonsense() -> Result<String> {
+pub fn get_text(config: &Config) -> Result<String> {
+    let text = match config.text_source {
+        TextSource::Static => Ok(TEXT.to_string()),
+        TextSource::GenerateNonsense => generate_nonsense(config.max_words),
+        TextSource::GenerateWeightedNonsense => generate_weighted_nonsense(config.max_words),
+        TextSource::File(ref path) => read_lines_from_file(path),
+        TextSource::MarkovChain(ref path) => generate_markov_chain(path, config.max_words),
+    }?;
+
+    Ok(if config.reflow { reflow(&text, config.width) } else { text })
+}
+
+fn reflow(text: &str, width: usize) -> String {
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    let mut line_width = 0;
+
+    for word in text.split_whitespace() {
+        let word_width = word.chars().count();
+
+        if line.is_empty() {
+            line.push_str(word);
+            line_width = word_width;
+        } else if line_width + 1 + word_width <= width {
+            line.push(' ');
+            line.push_str(word);
+            line_width += 1 + word_width;
+        } else {
+            lines.push(line);
+            line = word.to_string();
+            line_width = word_width;
+        }
+    }
+
+    if !line.is_empty() {
+        lines.push(line);
+    }
+
+    lines.join("\n")
+}
+
+fn generate_nonsense(max_words: usize) -> Result<String> {
     let contents = std::fs::read_to_string("data/words.txt")?;
     let words: Vec<_> = contents.lines().collect();
 
     let mut rng = rand::rng();
-    let selected_words: Vec<_> = words.sample(&mut rng, 100).copied().collect();
+    let selected_words: Vec<_> = words.sample(&mut rng, max_words).copied().collect();
     let lines: Vec<_> = selected_words
         .chunks(10)
         .map(|chunk| chunk.join(" "))
@@ -50,7 +112,7 @@ fn generate_nonsense() -> Result<String> {
     Ok(lines.join("\n"))
 }
 
-fn generate_weighted_nonsense() -> Result<String> {
+fn generate_weighted_nonsense(max_words: usize) -> Result<String> {
     let contents = std::fs::read_to_string("data/words_weighted.txt")?;
     let mut words = Vec::new();
 
@@ -63,7 +125,7 @@ fn generate_weighted_nonsense() -> Result<String> {
 
     let mut rng = rand::rng();
     let selected_words: Vec<_> = words
-        .sample_weighted(&mut rng, 100, |item| item.1)?
+        .sample_weighted(&mut rng, max_words, |item| item.1)?
         .map(|item| item.0)
         .collect();
 
@@ -96,8 +158,8 @@ fn read_lines_from_file(path: &str) -> Result<String> {
     Ok(selected_lines.join("\n"))
 }
 
-fn generate_markov_chain(path: &str) -> Result<String> {
+fn generate_markov_chain(path: &str, max_words: usize) -> Result<String> {
     let contents = std::fs::read_to_string(path)?;
     let chain = MarkovChain::build(&contents);
-    Ok(chain.generate())
+    Ok(chain.generate(max_words))
 }

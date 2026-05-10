@@ -1,3 +1,4 @@
+use clap::Parser;
 use color_eyre::Result;
 
 use crate::{config::Config, state::State, text::get_text, ui::run_ui};
@@ -13,9 +14,7 @@ mod ui;
 fn main() -> Result<()> {
     color_eyre::install()?; // augment errors / panics with easy to read messages
 
-    // TODO: parse command line arguments via clap
-    // let config = Config::parse();
-    let config = Config::new();
+    let config = Config::parse();
 
     loop {
         let text = get_text(&config)?;
